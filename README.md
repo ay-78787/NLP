@@ -16,6 +16,7 @@ Contains all 120+ medical voice commands(clean, noisy, and augmented surgical co
 
 ## Files in This Repository
 - `report.pdf` - Complete project paper
+-  `latex/` - LaTeX source code
 - `scripts/` - Python code for Whisper & BERT
 - `results/` - Performance results
 
