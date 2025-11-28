@@ -1,0 +1,573 @@
+%
+% File acl2020.tex
+%
+%% Based on the style files for ACL 2020, which were
+%% Based on the style files for ACL 2018, NAACL 2018/19, which were
+%% Based on the style files for ACL-2015, with some improvements
+%%  taken from the NAACL-2016 style
+%% Based on the style files for ACL-2014, which were, in turn,
+%% based on ACL-2013, ACL-2012, ACL-2011, ACL-2010, ACL-IJCNLP-2009,
+%% EACL-2009, IJCNLP-2008...
+%% Based on the style files for EACL 2006 by 
+%%e.agirre@ehu.es or Sergi.Balari@uab.es
+%% and that of ACL 08 by Joakim Nivre and Noah Smith
+
+\documentclass[11pt,a4paper]{article}
+\usepackage[hyperref]{acl2020}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath} % For \text in math mode
+\usepackage{array}  % For better table formatting
+\usepackage{booktabs} % For better looking tables
+\usepackage{subcaption} % For subfigure environment
+\usepackage{amssymb}  % For symbols
+\usepackage{float}  % For [H] placement
+\usepackage{paralist} % For enumerate* environment
+\usepackage{graphicx}  
+\usepackage{tabularx}   % auto-width columns
+\usepackage{pifont}     % \ding symbols for checkmark/xmark
+\newcommand{\cmark}{\ding{51}} % ✓
+\newcommand{\xmark}{\ding{55}} % ✗
+\usepackage{tikz}
+\usetikzlibrary{positioning, shadows, shapes, arrows.meta}
+\usepackage{subcaption}
+\usepackage{enumitem}
+
+
+% FOOTNOTE SETUP - ONLY ONCE!
+\usepackage[hang]{footmisc}
+\setlength{\footnotemargin}{1.2em} % Space for the number
+
+% URL SETUP - ONLY ONCE!
+\usepackage{url}
+\renewcommand{\UrlFont}{\ttfamily\small}
+
+% HYPERREF - ONLY ONCE!
+\usepackage{hyperref}
+
+\usepackage{microtype}
+
+\aclfinalcopy
+
+%\setlength\titlebox{5cm}
+% You can expand the titlebox if you need extra space
+% to show all the authors. Please do not make the titlebox
+% smaller than 5cm (the original size); we will check this
+% in the camera-ready version and ask you to change it back.
+
+\title{NLP701/805 final 
+ \\ Whispering in the OR: End-to-End Speech-to-Intent for Surgical Command Understanding  }
+
+\author{
+ Ayah Al-Naji \\
+  \texttt{ayah.al-naji@mbzuai.ac.ae} \\}
+\date{}
+
+\makeatother
+\usepackage[hang,flushmargin]{footmisc} % aligns number and text
+\usepackage{url}
+\def\UrlBreaks{\do\/\do-} % allows breaking after slashes
+\def\UrlFont{\small} % smaller URL font like ACL/EMNLP
+
+\begin{document}
+
+\maketitle
+\begin{abstract}
+We developed an end-to-end speech command understanding system to enable hands-free communication between robotic assistants and surgeons.   Our system combines an enhanced BERT classifier for intent classification with OpenAI's Whisper model for automatic speech recognition (ASR).   To replicate realistic operating room conditions, we developed a domain-specific dataset of 120 spoken surgical commands: 60 were manually recorded (30 clean and normal-speed, 30 fast and quiet), and 60 were enhanced using Audacity with additional noise, reverb, and combined Reverb-Bass-Treble effects. Clear speech was accurately transcribed by Whisper (WER = 0.28, 63.3\%), but it performed poorly when distorted (WER = 1.17, 3.4\%). Our BERT model classified intents with 15.8\% accuracy using these transcriptions, as opposed to nearly 31.7\% when trained on reference text.  These findings demonstrate that downstream comprehension is significantly impacted by ASR quality.  Our results underline the significance of noise-robust and domain-adapted training for clinical deployment and show that transformer-based models are feasible for speech-driven surgical assistance.
+The source code\footnote{\url{https://github.com/ay-78787/NLP}} and the %
+dataset\footnote{\url{https://www.kaggle.com/datasets/paultimothymooney/medical-speech-transcription-and-intent}} %
+are publicly available.
+\end{abstract}
+
+
+
+\section{Introduction}
+
+Voice-based interaction in surgical robotics is a practical way to improve accuracy, efficiency, and safety in the operating room.   Conventional control methods, such as hand-operated instruments or foot pedals, require physical contact and divert surgeons' attention away from the patient.   Natural speech communication reduces cognitive load, enhances workflow efficiency, and enables hands-free control between surgeons and robotic systems \cite{deepa2022speechhealthcare}.
+
+Automatic speech recognition (ASR) has advanced significantly thanks to deep learning models such as Deep Speech \cite{hannun2014deepspeech}, Deep Speech 2 \cite{pmlr-v48-amodei16}, and Listen, Attend, and Spell \cite{chan2016las}.   Transformer-based architectures \cite{vaswani2017attention} further improved performance, leading to modern systems like Whisper \cite{radford2023whisper}, which have strong multilingual and noise-resistant capabilities. But most ASR models are trained on generic datasets such as TIMIT \cite{1881146593179904768}, and they perform inconsistently in medical settings with high levels of background noise, specialized terminology, and accent variation \cite{alharbi2021asrreview}.
+
+Due to its highly sensitive and vital nature, it is very tough to create ASR systems for medical or surgery-related applications.   Decision-making or care could directly be affected through transcription or intention misunderstanding errors.   \textbf{This study intends to cover two major problems associated with this field:}
+\begin{itemize}
+    \item \textbf  { Limited medical speech data:}  Recording actual surgeries is not easy or shareable because of privacy and ethical reasons. As such, actual training and testing become less realistic because of simulated data being used instead.
+    \item \textbf{High reliability demands:} 
+due to the delicacy of the medical industry, even minor transcription errors can have dire repercussions. As a result, it is crucial to confirm that Whisper functions dependably in the high-stakes acoustic environments found in operating rooms.
+\end{itemize}
+
+We combine a refined BERT model \cite{devlin-etal-2019-bert} for intent classification of spoken surgical commands with Whisper for speech transcription in order to address these gaps. We assess the robustness of Whisper and its impact on downstream understanding using a domain-specific dataset of 120 commands, which we manually recorded, comprising 60 commands and 60 enhanced with realistic distortions using Audacity.
+
+
+\noindent \textbf{Contributions:}
+\begin{itemize}
+    \item Create a Whisper–BERT pipeline to comprehend medical commands.
+    \item Create and assess a domain-specific dataset with 120 commands.
+    \item We perform a comprehensive robustness analysis of Whisper (ASR) and investigate how transcription errors affect downstream intent classification.
+    \item We introduce baseline models for both ASR and intent classification, enabling a clear comparison against our fine-tuned BERT classifier.
+\end{itemize}
+In the following section, we review related work on automatic speech recognition and medical speech processing, highlighting how our approach differs from existing systems in both methodology and evaluation scope.
+
+\section{Related Work}
+Automatic Speech Recognition (ASR) has advanced significantly, largely due to the widespread adoption of deep learning methodologies and end-to-end modeling strategies. Initial ASR systems, including Deep Speech and Deep Speech 2 \cite{hannun2014deepspeech,pmlr-v48-amodei16}, utilized neural representations, which removed the requirement for manually crafted features; this enabled a direct correlation between audio input and textual output. Furthermore, while transformer-based architectures \cite{vaswani2017attention, Watanabe2018ESPnetES} incorporated self-attention mechanisms, which significantly enhanced both scalability and multilingual capabilities, attention-based models, including Listen, Attend, and Spell (LAS) \cite{chan2016las}, progressively refined the alignment between spoken phonemes and their corresponding written representations. These advancements have led to the creation of large models like Whisper \cite{radford2023whisper}. Whisper was trained on hundreds of thousands of hours of speech data, which was not ideally supervised. This training helped it perform well across different languages and in various acoustic environments.
+
+Many studies have focused on improving the performance of automatic speech recognition (ASR) systems in the presence of background noise and when speech characteristics undergo changes. Data augmentation methodologies, as evidenced by prior studies \cite{ko2015audioaugment,park2019specaugment, Balam2020ImprovingNR}, coupled with multi-condition training, have demonstrated efficacy in mitigating overfitting and augmenting the capacity to generalize across diverse acoustic environments. However, most current evaluations utilize open-domain benchmarks, such as LibriSpeech or Common Voice. These benchmarks do not fully capture the acoustic and linguistic complexities found in clinical settings.   Medical automatic speech recognition (ASR) systems must handle complex vocabulary, different speaker accents, and background noise from medical equipment. These challenges are often overlooked in standard ASR research \cite{alharbi2021asrreview,malik2021asrsurvey}. Although Whisper demonstrates strong generalization across various areas, its performance in medical and surgical settings has not been thoroughly investigated.
+
+Conversely, the application of natural language processing (NLP) within the healthcare sector has predominantly centered on text-centric applications, encompassing information retrieval, diagnostic assistance, and documentation processes. Although models such as BioBERT \cite{10.1093/bioinformatics/btz682} and ClinicalGPT \cite{Wang2023ClinicalGPTLL} have undergone adaptations for the comprehension of biomedical texts, investigations conducted by Deepa \cite{deepa2022speechhealthcare} and Sasanelli et al. \cite{app132011586} have explored the utility of NLP tools in the context of clinical decision-making and orthopaedic surgical procedures. Only limited work has examined real-time spoken command interpretation for medical robotics. Conventional ASR was used by Zinchenko et al. \cite{7737032} to implement a voice-controlled robotic system, but it was not robust to noise and semantic interpretation. In order to close the gap between speech recognition and intent understanding in surgical assistance, our work builds on these efforts by assessing Whisper's dependability under simulated operating-room conditions and combining it with a refined BERT classifier \cite{devlin-etal-2019-bert}.
+
+\section{Method}
+\label{sec:Method}
+
+We develop a complete system that turns spoken surgical commands into predicted intent categories. As shown in Figure~\ref{fig:pipeline}, the pipeline has two main parts. The first part is the Whisper ASR model, which transcribes all audio inputs, including our manually recorded commands and the augmented versions made with Audacity. The second part is a fine-tuned BERT classifier that uses the transcriptions to guess the intended action. We also include baseline models for both ASR and intent classification to give context and make the evaluation of the pipeline more thorough. 
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[
+  node distance=0.4cm,
+  every node/.style={align=center, font=\sffamily\scriptsize},
+  box/.style={rectangle, rounded corners, draw=black, fill=blue!15, minimum width=3cm, minimum height=0.5cm},
+  small/.style={rectangle, draw=gray!60, fill=yellow!20, minimum width=2.2cm, minimum height=0.4cm, font=\tiny}
+]
+
+% Vertical nodes
+\node[box] (audio) {Audio Recordings};
+\node[small, below left=0.15cm and 0.15cm of audio] (noise) {Noise};
+\node[small, below right=0.15cm and 0.15cm of audio] (reverb) {Reverb + EQ};
+\node[box, below=0.8cm of audio] (whisper) {Whisper ASR};
+\node[box, below=0.6cm of whisper] (text) {Transcriptions};
+\node[box, below=0.6cm of text] (bert) {BERT Classifier};
+\node[box, below=0.6cm of bert] (output) {Predicted Command};
+
+% Vertical arrows
+\draw[->, thin] (audio) -- (whisper);
+\draw[->, thin] (whisper) -- (text);
+\draw[->, thin] (text) -- (bert);
+\draw[->, thin] (bert) -- (output);
+
+% Augmentation arrows
+\draw[->, dashed, gray!50, thin] (noise) -- (audio);
+\draw[->, dashed, gray!50, thin] (reverb) -- (audio);
+
+\end{tikzpicture}
+\caption{Audio pipeline: recordings are augmented with noise/reverb effects, transcribed by Whisper, and classified by BERT into medical commands.}
+\label{fig:pipeline}
+\end{figure}
+
+
+
+\subsection{Whisper ASR Transcription}
+\label{sec:whisper}
+
+We use OpenAI’s Whisper model \cite{radford2023whisper} to transcribe all audio recordings into text. 
+We used two Whisper variants: \textbf{Whisper-small} as our primary ASR model and \textbf{Whisper-tiny} as a baseline. 
+Whisper-small provides stronger noise robustness and higher transcription accuracy, while Whisper-tiny offers a lightweight comparison point with substantially fewer parameters.
+
+All audio files (\texttt{.m4a} or \texttt{.wav}) are loaded from the data set directories and passed to Whisper using 
+the standard transcription call \texttt{model.transcribe(audio\_path)}. 
+For each file, we extract the predicted text (\texttt{result["text"]}) and store it together with the filename and corresponding intent label in a CSV file. 
+This CSV serves as the basis for both the evaluation of ASR (Section~\ref{sec:asr-eval}) and the classification of the downstream intent using BERT (Section~\ref{sec:bert-classifier}).
+
+We evaluated both Whisper models under five acoustic conditions:
+\textit{(i) normal clean speech}, 
+\textit{(ii) fast-and-quiet speech}, 
+\textit{(iii) noise-augmented speech}, 
+\textit{(iv) reverb–bass–treble–augmented speech}, 
+and \textit{(v) large Kaggle medical speech dataset}. 
+This setup lets us see how different kinds of acoustic distortion affect the quality of transcription and how model capacity (small vs. tiny) affects robustness.
+
+
+\subsection{ASR Robustness Evaluation}
+\label{sec:asr-eval}
+
+To evaluate Whisper's transcription quality, we test the model across five acoustic conditions: 
+\textit{(i) normal clean speech}, 
+\textit{(ii) fast-and-quiet speech}, 
+\textit{(iii) noise-augmented speech}, 
+\textit{(iv) reverb–bass–treble–augmented speech}, 
+and \textit{(v) the large Kaggle medical speech dataset}. 
+We manually  created a ground-truth dictionary that linked each audio file name to its corresponding standard reference transcription for our custom data set. 
+
+We compute the Word Error Rate (WER) using the \texttt{jiwer} library, applying the standard 
+\texttt{wer(reference, hypothesis)} function to each Whisper output. 
+We also report exact-sentence accuracy, treating a transcription as correct when \texttt{WER == 0}. 
+For every data set condition, we calculate the mean WER and the exact-match rate to summarize Whisper's  performance.
+
+This evaluation has two main goals. 
+
+\begin{itemize}
+    \item \textbf{Measuring robustness:} It measures how Whisper's transcription accuracy drops when there are different types of acoustic distortion, like fast speech, background noise, and echo.
+    \item \textbf{Establishing an upper bound for downstream performance:}It sets an upper limit on how accurately intent classification can be performed because transcription errors are directly passed into the BERT classifier.
+\end{itemize}
+
+
+\subsection{Intent Classification with BERT}
+\label{sec:bert-classifier}
+
+For downstream intent understanding, we fine-tune a transformer-based classifier built on 
+\texttt{bert-base-uncased} \cite{devlin-etal-2019-bert}. Each input to the model is a Whisper-small 
+transcription, and the output is one of three intent labels: 
+\begin{itemize}
+    \item Request Instrument.
+    \item Adjust Device.
+    \item Request Information.
+\end{itemize}
+
+We prepare the data by using scikit-learn's \texttt{LabelEncoder} to change categorical labels into numerical IDs and using the Whisper-small transcription as the input for the classifier. 
+ We use \texttt{BertTokenizer} to break the text into tokens, with truncation, padding, and a maximum sequence length of 64 tokens. The encoded examples are put into a PyTorch dataset and used to improve a \texttt{BertForSequenceClassification} model with three output labels.
+
+We used the HuggingFace \texttt{Trainer} API to fine-tune the model with standard hyperparameters: three training epochs, a batch size of 8, and a learning rate of $2\times10^{-5}$. We use 5-fold cross-validation to test the model and ensure it generalizes fairly. 
+
+\textbf{Note:} We apply intent classification baselines and cross-validation exclusively to our surgical command dataset, while using the Kaggle dataset for cross-domain ASR evaluation without intent classification baselines.
+
+ 
+
+ \subsubsection{Training Procedure: 5-Fold Cross-Validation}
+
+Because our custom dataset contains only 120 samples, we adopt a 5-fold cross-validation
+strategy to obtain stable and unbiased estimates of BERT's performance. The dataset is
+partitioned into five equally sized folds. In each round, four folds are used for training
+while the remaining fold serves as the validation set. This process cycles until every fold
+has served once as the validation split.
+
+Figure~\ref{fig:kfold-diagram} illustrates the cross-validation setup. By exposing the model
+to multiple train–validation splits, we reduce the risk of overfitting and obtain a more
+reliable estimate of downstream performance. 
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{f.png}
+\caption{Illustration of 5-fold cross-validation. Each fold uses four subsets for
+training (T) and one for validation (V). Final performance is averaged across all folds.}
+\label{fig:kfold-diagram}
+\end{figure}
+
+
+\subsubsection{Keyword-Based Baseline}
+ We use a rule-based intent classifier called \texttt{baseline\_predict}, which utilizes keyword lists created manually from our dataset. "Scalpel," "forceps," and "needle holder" are examples of terms that map to "Request Instrument." "Increase," "lower," "brightness," and "turn off" are examples of terms that map to "Adjust Device." "Show," "pressure," "what is," and "reading" are examples of terms that map to "Request Information." 
+ This baseline provides the BERT classifier with a clear and straightforward point of reference. 
+
+\subsubsection{Majority-Class Baseline}
+We make a simple baseline for each cross-validation split that always predicts the most common label in that fold's training set. This sets a minimum level that any trained classifier should be able to reach. 
+
+\subsubsection{Training on Augmented Data}
+To investigate the impact of acoustic augmentation on downstream classification, we integrate transcriptions from three datasets: the clean/fast–quiet dataset, the noise-augmented dataset, and the Reverb–Bass–Treble dataset. We combine all the examples into a single 120-sample corpus after standardizing the column names. This corpus is saved as \texttt{audio\_transcriptions\_all.csv}. 
+ Next, we repeat the fine-tuning and cross-validation process, this time using the Whisper-small transcriptions from the combined dataset. 
+
+\subsubsection{Kaggle Classification Setup}
+To assess the classifier's capacity to generalize beyond our regulated surgical domain, we evaluate BERT on the \textit{Medical Speech, Transcription, and Intent} dataset from Kaggle. 
+ We use the dataset's clean human-written transcriptions as input text and report absolute performance metrics to assess cross-domain generalization. 
+ Note that we do not apply baseline comparisons to the Kaggle dataset, as our focus is on measuring generalization capability rather than relative improvement.
+ 
+\subsection{End-to-End Pipeline Integration}
+Our system works like a two-stage pipeline. First, Whisper turns incoming audio into text. Then, a fine-tuned BERT classifier uses the text to guess which of three surgical intent categories it belongs to. We can put the performance of each stage in context by using both ASR- and intent-level baselines. Testing under different acoustic conditions also reveals how front-end transcription errors propagate throughout the entire pipeline. This integrated design enables us to conduct a controlled and comprehensible analysis of robustness across the entire speech-to-intent workflow. 
+
+\section{Data}
+Our system uses two sources of speech data: a custom domain-specific corpus and a publicly available medical speech dataset. 
+
+\subsection{Custom surgical command dataset}
+\label{subsec:custom-data}
+
+We constructed a domain-specific dataset of 120 spoken surgical commands, grouped into three intent categories:
+\textbf{Request Instrument}, \textbf{Adjust Device}, and \textbf{Request Information}. 
+The data set contains 60 manually recorded samples and 60 acoustically enhanced versions by Audacity, designed to simulate common operating room distortions. We used a smartphone microphone to record everything in a quiet room. We talk about the four types of audio in this data set below.
+
+\vspace{0.5em}
+\noindent\textbf{(a) Normal-speed clear speech:}\\
+We recorded 30 commands at a normal volume and speaking speed. These recordings will represent pristine or optimal environments with little or no ambient noise.
+Some commands are: ``Hand me scalpel'', ``Give me forceps'', ``Increase camera brightness'', ``Turn off the cauterizer'', and ``Show blood pressure''. 
+Each recording is paired with its canonical reference transcription and corresponding intent label.
+
+\vspace{0.5em}
+\noindent\textbf{(b) Fast-and-quiet speech:}\\
+We made 30 more recordings by saying each command quickly and quietly. 
+This method mimics low-volume or stressed communication in operating rooms, where doctors may need to give instructions quickly or with minimal voice projection. 
+
+\vspace{0.5em}
+\noindent\textbf{(c) Noise augmentation:}\\
+We used Audacity to add white noise to the original recordings, making them sound like the noise generated by operating-room equipment, such as suction devices and ventilators. Table~\ref{tab:white-noise} lists the settings that were used to make noise-augmented audio. These additions help us understand how Whisper's ASR performance deteriorates in the presence of acoustic interference. 
+
+\begin{table}[h!]
+\centering
+\caption{White noise augmentation parameters}
+\label{tab:white-noise}
+\small
+\begin{tabular}{@{}p{2.1cm}p{1.7cm}p{2.9cm}@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Description} \\
+\midrule
+Amplitude (0--1) & 0.02 & Loudness of added noise \\
+Duration & Equal to original & Matches command duration \\
+Mixing & Overlay & Keeps speech audible \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.5em}
+\noindent\textbf{(d) Reverb--Bass--Treble augmentation:}\\
+We used Audacity's reverberation and equalization filters to simulate the sound in the room as it would be in an operating room, taking into account factors such as reflective surfaces and microphone coloration.
+ Table~\ref{tab:reverb} shows the reverb settings, and Table~\ref{tab:bass-treble} shows the Bass and Treble settings. 
+ These additions test Whisper's strength against echo, color, and spectral distortion.    
+\begin{table}[h!]
+\centering
+\caption{Reverb parameters}
+\label{tab:reverb}
+\small
+\begin{tabular}{@{}p{2.3cm}p{1cm}p{3.1cm}@{}}
+\toprule
+\textbf{Setting} & \textbf{Value} & \textbf{Description} \\
+\midrule
+Room Size (\%) & 40 & Simulated reflection space \\
+Pre-delay (ms) & 10 & Delay before first reflection \\
+Reverberance (\%) & 50 & Controls reflection density \\
+Damping (\%) & 50 & Controls decay rate \\
+Tone Low (\%) & 100 & Maintains low frequencies \\
+Tone High (\%) & 100 & Preserves high clarity \\
+Wet Gain (dB) & +10 & Strength of reflected signal \\
+Dry Gain (dB) & 0 & Keeps original loudness \\
+Stereo Width (\%) & 100 & Preserves spatial width \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\caption{Bass and Treble parameters}
+\label{tab:bass-treble}
+\small
+\begin{tabular}{@{}p{1.1cm}p{1cm}p{4.3cm}@{}}
+\toprule
+\textbf{Setting} & \textbf{Value (dB)} & \textbf{Description} \\
+\midrule
+Bass & +15 & Enhances low-frequency strength \\
+Treble & +11 & Improves brightness and sharpness \\
+Volume & +5 & Balances overall loudness \\
+\bottomrule
+\end{tabular}
+\end{table}
+\vspace{0.5em}
+\noindent\textbf{(e) Waveform visualizations:}\\
+Figure~\ref{fig:waveforms} shows the four audio conditions in our data set: clear normal-speed speech, fast-and-quiet speech, noise-augmented speech, and Reverb–Bass–Treble–augmented speech. These visualizations show how each augmentation changes the signal's structure and energy profile. They provide a qualitative picture of the acoustic variability that Whisper must deal with during ASR.
+
+\begin{figure}[h!]
+\centering
+\begin{tabular}{cc}
+% First row: a) and b)
+\subfloat[ ]{\includegraphics[width=0.45\linewidth]{clean.png}} &
+\subfloat[ ]{\includegraphics[width=0.45\linewidth]{fast.png}} \\
+% Second row: c) and d)  
+\subfloat[ ]{\includegraphics[width=0.45\linewidth]{noisy.png}} &
+\subfloat[ ]{\includegraphics[width=0.45\linewidth]{Reverb.png}} \\
+\end{tabular}
+\caption{Waveform examples for (left to right): normal-speed clear speech, fast-and-quiet speech, noise-augmented speech, and Reverb–Bass–Treble–augmented speech.}
+\label{fig:waveforms}
+\end{figure}
+
+\usepackage{needspace}
+
+\needspace{5\baselineskip}
+\subsection{Kaggle medical speech dataset}
+\label{subsec:kaggle-data}
+
+To determine if our models extend beyond the limitations of our small custom dataset, we also utilize the publicly accessible \textit{Medical Speech, Transcription, and Intent} dataset from Kaggle.\footnote{\url{https://www.kaggle.com/datasets/paultimothymooney/medical-speech-transcription-and-intent}} This dataset contains hundreds of medical voice commands, spoken by different individuals. This means that the speaker's identity, accent, microphone quality, and recording conditions are all much more varied than in our 120-command corpus. 
+
+ The Kaggle dataset differs from ours in that it includes a broader range of general medical instructions. This provides us with a different perspective on real clinical speech.
+
+ Each audio file has a transcription and one of several intent labels that are related to common actions of medical devices.
+
+ The Kaggle samples have two roles in our research: 
+ \begin{itemize}
+    \item The Kaggle samples provide a significant, clean baseline to compare Whisper's ASR accuracy with our manually recorded and augmented commands.
+    \item They enable evaluation of whether our BERT classifier, trained on a small controlled dataset, can generalize to real-world medical speech scenarios.
+\end{itemize}
+
+The Kaggle dataset has more than just transcripts and intent labels. It also contains metadata that provides information about the quality of the recordings, including background noise, audio clipping, and overall audio clarity. 
+The average subjective audio quality rating is 3.68 on a 1–5 scale, and most samples have n \textit{no noise} or \textit{light noise}. Figure~\ref{fig:kaggle} shows how the overall audio quality scores are spread out over the 6,661 recordings. These differences in quality make the dataset a good way to test how well Whisper works and whether our classifier can work with a broader range of real-world clinical speech conditions.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=1\linewidth]{kaggle.png}
+\caption{Distribution of overall audio-quality scores (1 = poor, 5 = excellent) in the Kaggle
+medical speech dataset.}
+\label{fig:kaggle}
+\end{figure}
+
+\section{Experiments and Evaluation}
+\subsection{ASR Results}
+\label{sec:asr-results}
+We evaluate Whisper’s transcription quality across five acoustic settings:
+\textit{(i) normal clean speech}, \textit{(ii) fast-and-quiet speech},
+\textit{(iii) noise-augmented speech}, \textit{(iv) reverb--bass--treble–augmented speech},
+and \textit{(v) a large clean dataset from Kaggle}. 
+Figure~\ref{fig:whisper-asr} shows Word Error Rate (WER) in subfigure~\ref{fig:whisper-wer}
+and Exact Sentence Accuracy (ESA) in subfigure~\ref{fig:whisper-esa} for Whisper-small
+(our main ASR model) and Whisper-tiny (baseline).
+
+\begin{figure}[t]
+\centering
+\begin{subfigure}{\linewidth}
+    \centering
+    \includegraphics[width=0.8\linewidth]{1a.png}
+    \caption{Word Error Rate (WER).}
+    \label{fig:whisper-wer}
+\end{subfigure}
+
+\vspace{0.5cm} % Add some vertical space between subfigures
+
+\begin{subfigure}{\linewidth}
+    \centering
+    \includegraphics[width=0.8\linewidth]{1b.png}
+    \caption{Exact Sentence Accuracy (ESA).}
+    \label{fig:whisper-esa}
+\end{subfigure}
+
+\caption{Whisper ASR performance across four acoustic conditions for Whisper-small (main) and Whisper-tiny (baseline). Lower WER and higher ESA indicate better transcription quality.}
+\label{fig:whisper-asr}
+\end{figure}
+
+\subsubsection{Overall trends}
+As shown in Figure~\ref{fig:whisper-wer}, Whisper-small achieves strong performance on normal clean speech, with a low WER of 0.28, and a corresponding ESA of 63.3\% (Figure~\ref{fig:whisper-esa}). Performance degrades substantially on fast-and-quiet speech (WER = 1.17; ESA = 3.4\%), indicating that reduced volume and rapid articulation are the most difficult conditions for Whisper.
+
+\subsubsection{Effects of acoustic distortions}
+Adding noise raises the WER by a small amount (0.39), but ESA remains relatively high (48.3\%), indicating that Whisper performs well with background noise. Reverberation and equalization exacerbate spectral smearing, which increases WER to 0.70 and reduces ESA to 35.7\%. This supports the idea that reverberation affects ASR performance more than additional noise. 
+
+\subsubsection{Performance on the Kaggle dataset}
+Whisper-small achieves a WER of 0.234 on the large Kaggle dataset (Figure~\ref{fig:whisper-wer}), demonstrating robust performance on diverse medical speech. The ESA of 14\% reflects the vocabulary mismatch between Kaggle's medical symptoms and our surgical command references. \textbf{Note:} We report only Whisper-small performance on Kaggle, as our focus is on cross-domain generalization rather than model comparison.
+
+\subsubsection{Comparison to the baseline ASR}
+Figure~\ref{fig:whisper-wer} shows that Whisper-tiny always has a higher WER, especially for fast-and-quiet speech (1.25). The significant difference between tiny models highlights the importance of model capacity in handling changes in sound. 
+
+
+\subsubsection{Error patterns}
+Whisper exhibits several systematic failure modes that directly affect downstream 
+intent classification. Common failure cases include:
+\begin{itemize}
+    \item \textbf{Phonetic drift:}  
+    GT: ``pass needle holder''  
+    Whisper: ``past middle older''
+    \item \textbf{Cross-language hallucination:}  
+    GT: ``hand me scalpel''  
+    Whisper: ``hàn mié escapo''
+    \item \textbf{Word deletion:}  
+    GT: ``increase suction power''  
+    Whisper: ``increase power''
+    \item \textbf{Invention of unseen words:}  
+    GT: ``prepare scissors''  
+    Whisper: ``repair siskors''
+\end{itemize}
+
+These errors illustrate how acoustic degradation produces unpredictable transcription variants, 
+which then propagate into the intent classifier and cause significant accuracy loss in the 
+cascade pipeline.
+
+
+\subsection{BERT Classification Results}
+\label{sec:bert-results}
+
+We evaluate the downstream intent classifier using both \textit{reference transcriptions} 
+(i.e., clean canonical text) and \textit{Whisper-generated transcriptions}. Figure~\ref{fig:bert-accuracy} shows BERT’s accuracy across the four acoustic conditions and compares performance against two baselines: a keyword-matching classifier and a majority-class model.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{1c.png}
+\caption{BERT intent classification accuracy across acoustic conditions using 
+reference transcriptions and Whisper-generated transcriptions. 
+Keyword and majority baselines are shown for comparison.}
+\label{fig:bert-accuracy}
+\end{figure}
+
+
+\subsubsection{Reference vs.\ Whisper transcriptions}
+As shown in Figure~\ref{fig:bert-accuracy}, BERT achieves its highest accuracy with noise-augmented reference text (48.3\%), followed by reverb+EQ (35.7\%) and normal speech (31.7\%). However, when using Whisper transcriptions, accuracy decreases significantly across all conditions—dropping from 48.3\% to 30.5\% with noise, and from 31.7\% to 15.8\% with normal speech. Fast and quiet speech yields the poorest outcomes for both input types (6.9\% for reference text and 3.4\% for Whisper text), confirming the severe ASR degradation detailed in Section~\ref{sec:asr-results}.
+
+\subsubsection{Comparison to keyword and majority baselines}
+The keyword-based classifier achieves 63.3\% accuracy on our custom dataset, surpassing BERT in every aspect. This is what we expect because the custom dataset has short, formulaic commands with keywords that are very good at predicting what someone wants. The majority-class baseline, on the other hand, remains low (20\%), indicating that the dataset is not heavily biased toward a dominant class.
+
+\subsubsection{Effects of Whisper transcription errors}
+Our results indicate that errors propagate significantly from the ASR stage to the intent classifier. Because BERT was trained on clean reference text, any changes made by Whisper, such as substitutions, dropped words, or cross-language hallucinations, immediately impact classification accuracy. This demonstrates that making ASR more reliable is crucial for utilizing a cascaded Whisper–BERT pipeline in real-life surgical settings.
+
+\subsubsection{Generalization to the Kaggle dataset}
+\label{sec:kaggle-results}
+On the Kaggle dataset, BERT achieves near-perfect accuracy with reference text (99.6\%) and maintains strong performance with Whisper transcriptions (86.1\%). This demonstrates excellent generalization to diverse medical speech, though the 13.5\% performance drop reveals the impact of ASR errors even on high-quality transcriptions (WER: 0.234). The high accuracy across both conditions indicates that BERT effectively handles the broader medical vocabulary present in Kaggle's data, confirming the robustness of our intent classification approach beyond surgical commands. 
+
+\subsection{Cross-Dataset Comparison and Unified Analysis}
+\label{sec:cross-dataset}
+
+To better understand the overall behavior of our speech-to-intent system, we compare all datasets and acoustic conditions together. This subsection provides a unified view of (i) ASR robustness across clean, distorted, and real-world speech, and (ii) the resulting impact on downstream intent classification.
+
+Figure~\ref{fig:combined-asr} shows the Whisper-small ASR performance across all five
+datasets, while Figure~\ref{fig:combined-bert} summarizes BERT classification accuracy
+for both reference text and Whisper-generated transcriptions.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.95\linewidth]{1rr.png}
+\vspace{0.2cm}
+\includegraphics[width=0.95\linewidth]{1ss.png}
+\caption{Unified Whisper-small performance across all datasets:  
+(top) Word Error Rate (WER),  
+(bottom) Exact Sentence Accuracy (ESA).  
+Normal clean speech and Kaggle data yield the highest ASR accuracy, while fast-and-quiet speech produces the most severe degradation.}
+\label{fig:combined-asr}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.95\linewidth]{1zz.png}
+\caption{Unified BERT classifier accuracy across all datasets, comparing reference text vs.\ Whisper transcriptions. Accuracy correlates strongly with upstream ASR quality, with Kaggle data yielding the best cross-domain performance.}
+\label{fig:combined-bert}
+\end{figure}
+
+\subsubsection*{Key Findings}
+\begin{itemize}
+    \item \textbf{Clean speech vs.\ distorted speech:}  
+    Normal clean speech achieves low WER (0.28) and high ESA (63.3\%), while fast-and-quiet speech severely degrades performance (WER = 1.17; ESA = 3.4\%). Acoustic clarity is the single strongest factor influencing ASR success.
+
+    \item \textbf{Effect of augmentation type:}  
+    Noise augmentation increases WER only moderately, while reverb and equalization induce more severe transcription drift. This confirms that spectral smearing is harder for Whisper to model than additive noise.
+
+    \item \textbf{Downstream BERT sensitivity:}  
+    BERT accuracy drops sharply when using Whisper transcriptions instead of reference text. Errors in ASR propagate directly to the classifier, reducing accuracy by 15–25 percentage points across most conditions.
+
+    \item \textbf{Kaggle dataset behavior:}  
+    Despite its larger speaker and acoustic diversity, Kaggle speech yields the \emph{best overall results}:  
+    86.1\% accuracy using Whisper transcriptions, and 99.6\% using reference text.  
+    This highlights the classifier’s strong generalization to real-world data, and Whisper’s stability on clean professional recordings.
+
+    \item \textbf{Cross-dataset robustness patterns:}  
+    The combined results reveal a nearly linear relationship between WER and intent accuracy: conditions with higher ASR errors consistently produce lower classification scores. This validates the necessity of noise-robust ASR for reliable medical command understanding.
+\end{itemize}
+
+Overall, this unified comparison shows that the Whisper–BERT pipeline is effective on
+clean or moderately noisy medical speech but becomes fragile with low-volume or
+reverberant commands. Improving ASR robustness is therefore crucial for deployment in
+real surgical environments.
+
+ 
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+In our project, we developed and tested an end-to-end speech-to-intent pipeline for
+detailed understanding of surgical commands using OpenAI's Whisper ASR model and a
+fine-tuned BERT classifier. We assembled a domain-related dataset of 120 speech commands
+covering three categories of intent and extensively used fast-and-quiet to strengthen the audio
+speech, additive noise, and Reverb--Bass--Treble effects to simulate the
+conditions. In our experiments, Whisper-small transcribed regular speech correctly.
+Moderately noisy signals with relatively low word error rates, but performance degrades
+sharply under fast, low-volume, and reverberant speech conditions. For downstream tasks, BERT performs
+accurately on an example text, but deduces drastically when presented with noisy data
+Whisper Transcriptions, confirming the propagation of ASR Errors directly into the intent
+     ASR Errors
+classification. Even when applied to the extensive medical Kaggle dataset, evaluation demonstrated that
+our classifier can generalize effectively to other speakers and commands when there is good text.
+Readily accessible, thereby emphasizing the need for robust ASR performance and large-scale datasets.
+
+
+Future work will involve bolstering both the data and the automatic speech recognition (ASR) front-end. Regarding data, the aim will be to build a larger, multi-speaker corpus including a wider range of surgery scenarios and evaluate further data augmentation strategies in addition to multi-condition training, based on previous work in robustness to noise and SpecAugment-inspired transformations (Ko et al., 2015; Park et al., 2019; Balam et al., 2020). Regarding the ASR front-end, the most important next step would be to fine-tune or adapt the Whisper model and other related ASR architectures (Radford et al., 2023; [identifier 10447520]) in the medical speech domain, ensuring speech recognition performance in the face of challenging noises and reverberations. At the same time, other related ideas include exploring other transformer architectures relevant to intent classification tasks (Devlin et al., 2019; Sanh et al., 2019; [bioinformatics reference]) and closer integration of ASR and intent classification.
+
+\bibliography{anthology,acl2020}
+\bibliographystyle{acl_natbib}
+
+
+
+
+
+\end{document}
